@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Peddy Paper Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 40px;
+      background: #f7f9fc;
+    }
+    h1 {
+      font-size: 22px;
+      margin-bottom: 10px;
+    }
+    #distance {
+      font-size: 40px;
+      margin: 20px 0;
+      font-weight: bold;
+    }
+    #arrow {
+      font-size: 60px;
+      transform-origin: center;
+      transition: transform 0.2s ease-out;
+      display: inline-block;
+    }
+    #direction {
+      font-size: 18px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🏃 You are...</h1>
+  <div id="distance">Calculating...</div>
+  <div id="arrow">⬆️</div>
+  <div id="direction">Pointing...</div>
+  <p>toward your target location.</p>
+
+  <script>
+    // 🎯 Target coordinates (set your own!)
+    const target = { lat: 38.680283, lon: -9.155850 }; // Example: Lisbon center
+
+    function toRad(value) { return value * Math.PI / 180; }
+    function toDeg(value) { return value * 180 / Math.PI; }
+
+    function calcDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const φ1 = toRad(lat1), φ2 = toRad(lat2);
+      const Δφ = toRad(lat2 - lat1);
+      const Δλ = toRad(lon2 - lon1);
+      const a = Math.sin(Δφ/2)**2 +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    function calcBearing(lat1, lon1, lat2, lon2) {
+      const φ1 = toRad(lat1);
+      const φ2 = toRad(lat2);
+      const Δλ = toRad(lon2 - lon1);
+
+      const y = Math.sin(Δλ) * Math.cos(φ2);
+      const x = Math.cos(φ1)*Math.sin(φ2) -
+                Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+      const θ = Math.atan2(y, x);
+      return (toDeg(θ) + 360) % 360; // bearing in degrees
+    }
+
+    let userHeading = 0; // device compass direction
+
+    function updateDisplay(lat, lon, bearing) {
+      const distance = calcDistance(lat, lon, target.lat, target.lon);
+      document.getElementById("distance").textContent =
+        `${distance.toFixed(0)} m`;
+
+      const arrow = document.getElementById("arrow");
+      const directionDiv = document.getElementById("direction");
+
+      const direction = (bearing - userHeading + 360) % 360;
+      arrow.style.transform = `rotate(${direction}deg)`;
+
+      let card = "";
+      if (bearing < 22.5 || bearing >= 337.5) card = "N";
+      else if (bearing < 67.5) card = "NE";
+      else if (bearing < 112.5) card = "E";
+      else if (bearing < 157.5) card = "SE";
+      else if (bearing < 202.5) card = "S";
+      else if (bearing < 247.5) card = "SW";
+      else if (bearing < 292.5) card = "W";
+      else card = "NW";
+
+      directionDiv.textContent = `Direction: ${card} (${bearing.toFixed(0)}°)`;
+    }
+
+    function updatePosition(position) {
+      const lat = position.coords.latitude;
+      const lon = position.coords.longitude;
+      const bearing = calcBearing(lat, lon, target.lat, target.lon);
+      updateDisplay(lat, lon, bearing);
+    }
+
+    function handleError(err) {
+      document.getElementById("distance").textContent =
+        "Unable to access GPS location.";
+    }
+
+    // Get user location continuously
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(updatePosition, handleError, {
+        enableHighAccuracy: true
+      });
+    } else {
+      document.getElementById("distance").textContent =
+        "Geolocation not supported.";
+    }
+
+    // Get compass direction (mobile only)
+    if (window.DeviceOrientationEvent) {
+      window.addEventListener("deviceorientation", function(event) {
+        if (event.absolute && event.alpha !== null) {
+          userHeading = event.alpha; // degrees from North
+        }
+      }, true);
+    }
+  </script>
+</body>
+</html>
