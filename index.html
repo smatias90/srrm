@@ -30,6 +30,33 @@
       font-size: 18px;
       margin-top: 10px;
     }
+    #speed {
+      font-size: 24px;
+      margin: 10px 0;
+      color: #333;
+    }
+    #elapsed {
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 16px;
+    }
+    #toggleBtn {
+      margin-top: 24px;
+      padding: 14px 36px;
+      font-size: 18px;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      background: #28a745;
+      color: white;
+      transition: background 0.2s;
+    }
+    #toggleBtn.running {
+      background: #dc3545;
+    }
+    #toggleBtn:hover {
+      opacity: 0.9;
+    }
   </style>
 </head>
 <body>
@@ -38,14 +65,25 @@
   <div id="arrow">⬆️</div>
   <div id="direction">Pointing...</div>
   <p>toward your target location.</p>
-
+ 
+  <div id="speed">Avg Speed: —</div>
+  <div id="elapsed">Time: —</div>
+  <button id="toggleBtn" onclick="toggleTracking()">▶ Start</button>
+ 
   <script>
     // 🎯 Target coordinates (set your own!)
-    const target = { lat: 38.6798334984742, lon: -9.153907099733594 }; // Example: Lisbon center
+    const target = { lat: 38.6798334984742, lon: -9.153907099733594 };
+ 
+    let tracking = false;
+    let startTime = null;
+    let startCoords = null;
+    let totalDistance = 0; // metres travelled
+    let lastCoords = null;
+    let timerInterval = null;
  
     function toRad(value) { return value * Math.PI / 180; }
     function toDeg(value) { return value * 180 / Math.PI; }
-
+ 
     function calcDistance(lat1, lon1, lat2, lon2) {
       const R = 6371e3;
       const φ1 = toRad(lat1), φ2 = toRad(lat2);
@@ -57,32 +95,30 @@
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
       return R * c;
     }
-
+ 
     function calcBearing(lat1, lon1, lat2, lon2) {
       const φ1 = toRad(lat1);
       const φ2 = toRad(lat2);
       const Δλ = toRad(lon2 - lon1);
-
       const y = Math.sin(Δλ) * Math.cos(φ2);
       const x = Math.cos(φ1)*Math.sin(φ2) -
                 Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
       const θ = Math.atan2(y, x);
-      return (toDeg(θ) + 360) % 360; // bearing in degrees
+      return (toDeg(θ) + 360) % 360;
     }
-
-    let userHeading = 0; // device compass direction
-
+ 
+    let userHeading = 0;
+ 
     function updateDisplay(lat, lon, bearing) {
-      const distance = calcDistance(lat, lon, target.lat, target.lon);
+      const distToTarget = calcDistance(lat, lon, target.lat, target.lon);
       document.getElementById("distance").textContent =
-        `${(distance / 1000).toFixed(2)} km`;
-
+        `${(distToTarget / 1000).toFixed(2)} km`;
+ 
       const arrow = document.getElementById("arrow");
       const directionDiv = document.getElementById("direction");
-
       const direction = (bearing - userHeading + 360) % 360;
       arrow.style.transform = `rotate(${direction}deg)`;
-
+ 
       let card = "";
       if (bearing < 22.5 || bearing >= 337.5) card = "N";
       else if (bearing < 67.5) card = "NE";
@@ -92,23 +128,81 @@
       else if (bearing < 247.5) card = "SW";
       else if (bearing < 292.5) card = "W";
       else card = "NW";
-
       directionDiv.textContent = `Direction: ${card} (${bearing.toFixed(0)}°)`;
     }
-
+ 
+    function formatElapsed(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      return h > 0
+        ? `${h}h ${m.toString().padStart(2,'0')}m ${s.toString().padStart(2,'0')}s`
+        : `${m}m ${s.toString().padStart(2,'0')}s`;
+    }
+ 
+    function updateSpeedDisplay() {
+      if (!startTime) return;
+      const elapsedSec = (Date.now() - startTime) / 1000;
+      document.getElementById("elapsed").textContent =
+        `Time: ${formatElapsed(elapsedSec)}`;
+ 
+      if (elapsedSec > 0 && totalDistance > 0) {
+        const avgSpeedMs = totalDistance / elapsedSec;   // m/s
+        const avgSpeedKmh = avgSpeedMs * 3.6;            // km/h
+        document.getElementById("speed").textContent =
+          `Avg Speed: ${avgSpeedKmh.toFixed(2)} km/h`;
+      }
+    }
+ 
     function updatePosition(position) {
       const lat = position.coords.latitude;
       const lon = position.coords.longitude;
       const bearing = calcBearing(lat, lon, target.lat, target.lon);
       updateDisplay(lat, lon, bearing);
+ 
+      if (tracking) {
+        if (lastCoords) {
+          const seg = calcDistance(lastCoords.lat, lastCoords.lon, lat, lon);
+          // ignore GPS noise — only count moves > 2 m
+          if (seg > 2) {
+            totalDistance += seg;
+            lastCoords = { lat, lon };
+          }
+        } else {
+          lastCoords = { lat, lon };
+        }
+      }
     }
-
+ 
     function handleError(err) {
       document.getElementById("distance").textContent =
         "Unable to access GPS location.";
     }
-
-    // Get user location continuously
+ 
+    function toggleTracking() {
+      const btn = document.getElementById("toggleBtn");
+      if (!tracking) {
+        // START
+        tracking = true;
+        startTime = Date.now();
+        totalDistance = 0;
+        lastCoords = null;
+        document.getElementById("speed").textContent = "Avg Speed: 0.00 km/h";
+        document.getElementById("elapsed").textContent = "Time: 0m 00s";
+        btn.textContent = "⏹ Stop";
+        btn.classList.add("running");
+        timerInterval = setInterval(updateSpeedDisplay, 1000);
+      } else {
+        // STOP
+        tracking = false;
+        clearInterval(timerInterval);
+        timerInterval = null;
+        updateSpeedDisplay(); // final update
+        btn.textContent = "▶ Start";
+        btn.classList.remove("running");
+      }
+    }
+ 
     if (navigator.geolocation) {
       navigator.geolocation.watchPosition(updatePosition, handleError, {
         enableHighAccuracy: true
@@ -117,12 +211,11 @@
       document.getElementById("distance").textContent =
         "Geolocation not supported.";
     }
-
-    // Get compass direction (mobile only)
+ 
     if (window.DeviceOrientationEvent) {
       window.addEventListener("deviceorientation", function(event) {
         if (event.absolute && event.alpha !== null) {
-          userHeading = event.alpha; // degrees from North
+          userHeading = event.alpha;
         }
       }, true);
     }
