@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Peddy Paper Tracker</title>
+  <title>Where is home?</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -41,8 +41,8 @@
 
   <script>
     // 🎯 Target coordinates (set your own!)
-    const target = { lat: 38.680283, lon: -9.155850 }; // Example: Lisbon center
-
+    const target = { lat: 38.6798334984742, lon: -9.153907099733594 }; // Example: Lisbon center
+ 
     function toRad(value) { return value * Math.PI / 180; }
     function toDeg(value) { return value * 180 / Math.PI; }
 
@@ -75,7 +75,7 @@
     function updateDisplay(lat, lon, bearing) {
       const distance = calcDistance(lat, lon, target.lat, target.lon);
       document.getElementById("distance").textContent =
-        `${distance.toFixed(0)} m`;
+        `${(distance / 1000).toFixed(2)} km`;
 
       const arrow = document.getElementById("arrow");
       const directionDiv = document.getElementById("direction");
